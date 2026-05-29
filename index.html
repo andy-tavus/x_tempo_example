@@ -122,7 +122,65 @@
       height: 28px;
       display: flex;
       align-items: center;
-      margin-bottom: 28px;
+      margin-bottom: 12px;
+    }
+
+    .chapter-markers {
+      position: relative;
+      height: 14px;
+      margin-bottom: 24px;
+    }
+
+    .chapter-marker {
+      position: absolute;
+      top: 0;
+      width: 4px;
+      height: 14px;
+      border-radius: 999px;
+      background: #94a3b8;
+      transform: translateX(-50%);
+      pointer-events: none;
+    }
+
+    .chapters {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .chapter-btn {
+      border: 3px solid #e2e8f0;
+      border-radius: 18px;
+      background: var(--white);
+      color: var(--text);
+      padding: 14px 16px;
+      font: inherit;
+      font-size: clamp(0.95rem, 2.8vw, 1.05rem);
+      font-weight: 800;
+      text-align: left;
+      cursor: pointer;
+      box-shadow: 0 4px 0 #cbd5e1;
+      transition: transform 0.08s ease, box-shadow 0.08s ease, border-color 0.12s ease, background 0.12s ease;
+    }
+
+    .chapter-btn:active {
+      transform: translateY(3px);
+      box-shadow: 0 1px 0 #cbd5e1;
+    }
+
+    .chapter-btn.active {
+      border-color: #9333ea;
+      background: linear-gradient(160deg, #f5f3ff, #fdf4ff);
+      box-shadow: 0 4px 0 #7e22ce;
+    }
+
+    .chapter-btn-time {
+      display: block;
+      margin-top: 4px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #64748b;
     }
 
     .seek-track {
@@ -285,13 +343,17 @@
         >
       </div>
 
+      <div class="chapter-markers" id="chapterMarkers" aria-hidden="true"></div>
+
+      <div class="chapters" id="chapters" aria-label="Tempo example clips"></div>
+
       <div class="controls">
         <button class="side-btn" id="backBtn" type="button" aria-label="Go back 10 seconds">⏪</button>
         <button class="play-btn paused" id="playBtn" type="button" aria-label="Play">▶</button>
         <button class="side-btn" id="forwardBtn" type="button" aria-label="Go forward 10 seconds">⏩</button>
       </div>
 
-      <p class="hint">Drag the purple dot to jump anywhere in the song.</p>
+      <p class="hint">Tap an example below, or drag the purple dot to jump anywhere.</p>
     </section>
   </main>
 
@@ -309,8 +371,20 @@
     const durationEl = document.getElementById("duration");
     const backBtn = document.getElementById("backBtn");
     const forwardBtn = document.getElementById("forwardBtn");
+    const chaptersEl = document.getElementById("chapters");
+    const chapterMarkersEl = document.getElementById("chapterMarkers");
+
+    const chapters = [
+      { label: "Example 1", start: 2.27, end: 30.24 },
+      { label: "Example 2", start: 32.43, end: 89.97 },
+      { label: "Example 3", start: 92.28, end: 119.97 },
+      { label: "Example 4", start: 122.04, end: 149.63 },
+      { label: "Example 5", start: 150.91, end: 179.98 },
+      { label: "Example 6", start: 183.07, end: 210.29 },
+    ];
 
     let isSeeking = false;
+    let chapterButtons = [];
 
     function formatTime(seconds) {
       if (!Number.isFinite(seconds)) return "0:00";
@@ -325,12 +399,63 @@
       playBtn.setAttribute("aria-label", playing ? "Pause" : "Play");
     }
 
+    function getActiveChapterIndex(time) {
+      return chapters.findIndex((chapter) => time >= chapter.start && time < chapter.end);
+    }
+
+    function updateActiveChapter() {
+      const activeIndex = getActiveChapterIndex(audio.currentTime);
+      chapterButtons.forEach((button, index) => {
+        button.classList.toggle("active", index === activeIndex);
+      });
+    }
+
     function updateProgress() {
       if (!audio.duration) return;
       const percent = (audio.currentTime / audio.duration) * 100;
       seek.value = percent;
       seekFill.style.width = `${percent}%`;
       currentTimeEl.textContent = formatTime(audio.currentTime);
+      updateActiveChapter();
+    }
+
+    function jumpToChapter(index) {
+      const chapter = chapters[index];
+      if (!chapter) return;
+      audio.currentTime = chapter.start;
+      updateProgress();
+    }
+
+    function renderChapters() {
+      chaptersEl.innerHTML = "";
+      chapterMarkersEl.innerHTML = "";
+      chapterButtons = [];
+
+      chapters.forEach((chapter, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "chapter-btn";
+        button.innerHTML = `${chapter.label}<span class="chapter-btn-time">${formatTime(chapter.start)}</span>`;
+        button.addEventListener("click", async () => {
+          jumpToChapter(index);
+          if (audio.paused) {
+            try {
+              await audio.play();
+            } catch (error) {
+              console.error(error);
+            }
+          }
+        });
+        chaptersEl.appendChild(button);
+        chapterButtons.push(button);
+
+        if (index > 0 && audio.duration) {
+          const marker = document.createElement("span");
+          marker.className = "chapter-marker";
+          marker.style.left = `${(chapter.start / audio.duration) * 100}%`;
+          chapterMarkersEl.appendChild(marker);
+        }
+      });
     }
 
     playBtn.addEventListener("click", async () => {
@@ -369,6 +494,7 @@
 
     audio.addEventListener("loadedmetadata", () => {
       durationEl.textContent = formatTime(audio.duration);
+      renderChapters();
       updateProgress();
     });
 
